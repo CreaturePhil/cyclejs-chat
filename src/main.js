@@ -1,6 +1,7 @@
 import xs from 'xstream'
 import {run} from '@cycle/xstream-run'
 import {makeDOMDriver, div, input, label} from '@cycle/dom'
+import debounce from 'xstream/extra/debounce'
 import io from 'socket.io-client'
 
 function intent({DOM, Socket}) {
@@ -12,11 +13,15 @@ function intent({DOM, Socket}) {
   const addMessage$ = message$
     .map(ev => ev.target.value)
     .filter(val => val.trim())
-    .map(val => ({eventName: 'chat message', data: val}))
 
   const newMessage$ = Socket.events('chat message')
 
-  return {elem$, addMessage$, newMessage$}
+  const changeUsername$ = DOM.select('.username').events('input')
+    .compose(debounce(500))
+    .map(ev => ev.target.value)
+    .filter(val => val.length > 0)
+
+  return {elem$, addMessage$, newMessage$, changeUsername$}
 }
 
 function model(actions) {
@@ -25,19 +30,25 @@ function model(actions) {
       Object.assign({}, state, {messages: state.messages.concat(message)})
     )
 
-  const state$ = messages$
-    .fold((state, action) => action(state), {messages: []})
-    .startWith({messages: []})
+  const username$ = actions.changeUsername$
+    .map(username => state =>
+      Object.assign({}, state, {username})
+    )
+
+  const state$ = xs.merge(messages$, username$)
+    .fold((state, action) => action(state), {messages: [], username: ''})
+    .startWith({messages: [], username: ''})
 
   return state$
 }
 
 function view(state$) {
-  return state$.debug('ho').map(state =>
+  return state$.map(state =>
     div([
       div([
         label('Username: '),
-        input({attrs: {type: 'text'}})
+        input('.username', {attrs: {type: 'text'}}),
+        state.username
       ]),
       div(state.messages.map(message =>
         div([message])
@@ -53,9 +64,14 @@ function main(sources) {
   const actions = intent(sources)
   const vdom$ = view(model(actions))
 
+  const socket$ = xs.combine(actions.addMessage$, actions.changeUsername$)
+    .map(([message, username]) =>
+      ({eventName: 'chat message', data: `${username}: ${message}`})
+    )
+
   return {
     DOM: vdom$,
-    Socket: actions.addMessage$,
+    Socket: socket$,
     ClearInput: actions.elem$
   }
 }
