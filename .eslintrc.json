@@ -3,5 +3,8 @@
   "plugins": [
     "standard",
     "promise"
-  ]
+  ],
+  "rules": {
+    "space-before-function-paren": 0
+  }
 }

@@ -108,7 +108,7 @@ function makeSocketDriver(url) {
       }
     }
   }
-  return SocketDriver;
+  return SocketDriver
 }
 
 const drivers = {
